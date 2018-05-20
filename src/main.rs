@@ -1,22 +1,39 @@
-#![feature(proc_macro, generators)]
+#![feature(rust_2018_preview, rust_2018_idioms, proc_macro, generators)]
 
 extern crate chrono;
-extern crate futures_await as futures;
-extern crate tokio_core;
+extern crate futures;
 
-use chrono::DateTime;
 use chrono::offset::Utc;
-use futures::{Async, Future, Poll};
-// use futures::done;
-// use futures::prelude::*;
-// use futures::future::{err, ok};
-use tokio_core::reactor::Core;
-// use std::error::Error;
+use chrono::DateTime;
+use futures::{Async, Future, Poll, task};
+use futures::future::select_all;
+use futures::executor::ThreadPoolBuilder;
+use std::io::Error as ioError;
 
+#[derive(Debug)]
+struct AskTimeserver<'a> {
+    host: &'a str,
+    time: DateTime<Utc>
+}
+
+impl AskTimeserver<'a> {
+    fn new(host: &str) -> AskTimeserver {
+        AskTimeserver { host: host, time: Utc::now() }
+    }
+}
+
+impl Future for AskTimeserver<'a> {
+    type Item = DateTime<Utc>;
+    type Error = ioError;
+
+    fn poll(&mut self, _cx: &mut task::Context) -> Poll<Self::Item, Self::Error> {
+        Ok(Async::Ready(Utc::now()))
+    }
+}
 
 #[derive(Debug)]
 struct Timer {
-    now: DateTime<Utc>
+    now: DateTime<Utc>,
 }
 
 impl Timer {
@@ -26,18 +43,35 @@ impl Timer {
 }
 
 impl Future for Timer {
-    type Item = DateTime<Utc>;
-    type Error = String;
+    type Item = (String, DateTime<Utc>);
+    type Error = ioError;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        Ok(Async::Ready(Utc::now()))
+    fn poll(&mut self, cx: &mut task::Context) -> Poll<Self::Item, Self::Error> {
+        let timeservers = vec!(
+            AskTimeserver::new("time.apple.com"),
+            AskTimeserver::new("time.ntp.org"),
+            AskTimeserver::new("time-a-b.nist.gov"),
+            AskTimeserver::new("time-b-b.nist.gov")
+        );
+
+        select_all(timeservers).poll(cx).map(|res| {
+            res.map(|v| {
+                (v.2.get(v.1).unwrap().host.to_string(), v.0)
+            })
+        }).map_err(|res| {
+            res.0
+        })
     }
 }
 
-
 fn main() {
-    let mut reactor = Core::new().unwrap();
+    let mut pool = ThreadPoolBuilder::new()
+        .pool_size(4)
+        .name_prefix("rs-microservice")
+        .create()
+        .unwrap();
 
-    let retval = reactor.run(Timer::new());
-    println!("Core returned {:?}!", retval);
+    let result = pool.run(Timer::new());
+
+    println!("Result {:?}", result);
 }

@@ -5,6 +5,4 @@ authors = ["Periklis Tsirakidis <periklis.tsirakidis@holidaycheck.com>"]
 
 [dependencies]
 chrono="0.4.2"
-futures="*"
-tokio-core="*"
-futures-await = { git = 'https://github.com/alexcrichton/futures-await' }
+futures="0.2.1"
