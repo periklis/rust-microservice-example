@@ -32,4 +32,3 @@ Basic requirements to write simple microservices:
 
 - Async/Futures support for typical storage connectors: MySQL, PostgreSQL, MongoDB, ElasticSearch
 - Async/Futures support for typical serialization protocols: Protobuf, Thrift, Avro
-- 
